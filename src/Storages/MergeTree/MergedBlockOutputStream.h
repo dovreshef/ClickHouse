@@ -27,7 +27,8 @@ public:
         size_t part_uncompressed_bytes,
         bool reset_columns_ = false,
         bool blocks_are_granules_size = false,
-        const WriteSettings & write_settings = {});
+        const WriteSettings & write_settings = {},
+        WrittenOffsetColumns * offset_columns = nullptr);
 
     Block getHeader() const { return metadata_snapshot->getSampleBlock(); }
 

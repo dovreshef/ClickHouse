@@ -372,6 +372,9 @@ void MergeTreeDataPartWriterWide::write(const Block & block, const IColumnPermut
     calculateAndSerializeStatistics(block);
 
     shiftCurrentMark(granules_to_write);
+
+    if (written_offset_columns)
+        *written_offset_columns = offset_columns;
 }
 
 void MergeTreeDataPartWriterWide::writeSingleMark(
