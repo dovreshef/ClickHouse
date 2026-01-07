@@ -96,6 +96,7 @@ namespace MergeTreeSetting
     extern const MergeTreeSettingsUInt64 vertical_insert_algorithm_min_columns_to_activate;
     extern const MergeTreeSettingsUInt64 vertical_insert_algorithm_min_bytes_to_activate;
     extern const MergeTreeSettingsUInt64 vertical_insert_algorithm_columns_batch_size;
+    extern const MergeTreeSettingsUInt64 vertical_insert_algorithm_columns_batch_bytes;
 }
 
 namespace ErrorCodes
@@ -887,6 +888,7 @@ MergeTreeTemporaryPartPtr MergeTreeDataWriter::writeTempPartImpl(
 
         VerticalInsertTask::Settings vi_settings{
             .columns_batch_size = (*data_settings)[MergeTreeSetting::vertical_insert_algorithm_columns_batch_size],
+            .columns_batch_bytes = (*data_settings)[MergeTreeSetting::vertical_insert_algorithm_columns_batch_bytes],
         };
 
         VerticalInsertTask task(

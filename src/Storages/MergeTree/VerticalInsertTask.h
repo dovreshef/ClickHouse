@@ -10,6 +10,7 @@
 #include <Common/Logger.h>
 
 #include <deque>
+#include <unordered_map>
 
 namespace DB
 {
@@ -29,6 +30,7 @@ public:
     struct Settings
     {
         size_t columns_batch_size;
+        size_t columns_batch_bytes;
     };
 
     VerticalInsertTask(
@@ -66,6 +68,7 @@ private:
         std::unique_ptr<MergedColumnOnlyOutputStream> stream;
         MergeTreeData::DataPart::Checksums checksums;
         ColumnsSubstreams substreams;
+        size_t open_streams = 0;
     };
 
     /// Classify columns into merging (PK) and gathering (rest)
@@ -116,6 +119,7 @@ private:
     /// Checksums accumulated from vertical phase
     MergeTreeData::DataPart::Checksums vertical_checksums;
     ColumnsSubstreams vertical_columns_substreams;
+    std::unordered_map<String, std::vector<String>> vertical_substreams_by_column;
 
     /// Track written offset columns for Nested types
     IMergedBlockOutputStream::WrittenOffsetColumns written_offset_columns;

@@ -1224,6 +1224,9 @@ class MergeTreeSettingsRandomizer:
             0.4, 0.4, 0, 512 * 1024 * 1024
         ),
         "vertical_insert_algorithm_columns_batch_size": lambda: random.randint(1, 256),
+        "vertical_insert_algorithm_columns_batch_bytes": threshold_generator(
+            0.4, 0.4, 0, 512 * 1024 * 1024
+        ),
         "allow_vertical_merges_from_compact_to_wide_parts": lambda: random.randint(
             0, 1
         ),

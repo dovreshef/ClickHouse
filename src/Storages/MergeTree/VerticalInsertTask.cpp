@@ -16,6 +16,7 @@
 #include <Common/Stopwatch.h>
 #include <base/scope_guard.h>
 
+#include <algorithm>
 #include <deque>
 
 namespace ProfileEvents
@@ -368,6 +369,7 @@ void VerticalInsertTask::cancel() noexcept
         }
     }
     delayed_streams.clear();
+    vertical_substreams_by_column.clear();
 }
 
 void VerticalInsertTask::execute()
@@ -458,7 +460,9 @@ void VerticalInsertTask::executeHorizontalPhase()
 void VerticalInsertTask::executeVerticalPhase()
 {
     const size_t batch_size = std::max<size_t>(1, settings.columns_batch_size);
+    const size_t batch_bytes_budget = settings.columns_batch_bytes;
     size_t batch_count = 0;
+    size_t batch_bytes = 0;
     const bool need_sync = (*data_settings)[MergeTreeSetting::fsync_after_insert];
 
     if (!horizontal_output)
@@ -468,21 +472,19 @@ void VerticalInsertTask::executeVerticalPhase()
 
     column_block.clear();
     column_list.clear();
+    vertical_substreams_by_column.clear();
 
     MergeTreeIndices batch_skip_indexes;
     ColumnsStatistics batch_statistics;
     chassert(delayed_streams.empty());
     active_column_writer = nullptr;
 
-    /// Lower default than regular insert (100) to reduce peak memory for wide tables
-    static constexpr size_t DEFAULT_VERTICAL_INSERT_DELAYED_STREAMS = 16;
-
     size_t max_delayed_streams = 0;
     const auto & query_settings = context->getSettingsRef();
     if (query_settings[Setting::max_insert_delayed_streams_for_parallel_write].changed)
         max_delayed_streams = query_settings[Setting::max_insert_delayed_streams_for_parallel_write];
-    else if (new_data_part->getDataPartStorage().supportParallelWrite())
-        max_delayed_streams = DEFAULT_VERTICAL_INSERT_DELAYED_STREAMS;
+
+    size_t delayed_open_streams = 0;
 
     auto flush_batch = [&]()
     {
@@ -525,13 +527,16 @@ void VerticalInsertTask::executeVerticalPhase()
         auto changed_checksums = delayed.stream->fillChecksums(new_data_part, vertical_checksums);
         delayed.checksums.add(std::move(changed_checksums));
         delayed.substreams = delayed.stream->getColumnsSubstreams();
+        delayed.open_streams = delayed.stream->getNumberOfOpenStreams();
 
         if (max_delayed_streams > 0)
         {
             delayed_streams.emplace_back(std::move(delayed));
-            while (delayed_streams.size() > max_delayed_streams)
+            delayed_open_streams += delayed_streams.back().open_streams;
+            while (delayed_open_streams > max_delayed_streams)
             {
                 auto & front = delayed_streams.front();
+                delayed_open_streams -= front.open_streams;
                 finalizeDelayedStream(front, need_sync);
                 delayed_streams.pop_front();
             }
@@ -546,6 +551,7 @@ void VerticalInsertTask::executeVerticalPhase()
         batch_skip_indexes.clear();
         batch_statistics.clear();
         batch_count = 0;
+        batch_bytes = 0;
     };
 
     for (const auto & column : gathering_columns)
@@ -562,8 +568,13 @@ void VerticalInsertTask::executeVerticalPhase()
         ColumnPtr column_data = col_data->column;
         col_data->column.reset();
 
-        column_block.insert({column_data, col_type, std::move(col_name)});
+        const size_t column_bytes = column_data ? column_data->byteSize() : 0;
+        if (batch_bytes_budget > 0 && batch_bytes > 0 && batch_bytes + column_bytes > batch_bytes_budget)
+            flush_batch();
+
+        column_block.insert({column_data, col_type, col_name});
         column_list.push_back(column);
+        batch_bytes += column_bytes;
 
         auto it_idx = skip_indexes_by_column.find(column.name);
         if (it_idx != skip_indexes_by_column.end())
@@ -582,7 +593,7 @@ void VerticalInsertTask::executeVerticalPhase()
         }
 
         ++batch_count;
-        if (batch_count >= batch_size)
+        if (batch_count >= batch_size || (batch_bytes_budget > 0 && batch_bytes >= batch_bytes_budget))
             flush_batch();
     }
 
@@ -596,6 +607,21 @@ void VerticalInsertTask::executeVerticalPhase()
     for (auto & stream : delayed_streams)
         finalizeDelayedStream(stream, need_sync);
     delayed_streams.clear();
+
+    if (!vertical_substreams_by_column.empty())
+    {
+        ColumnsSubstreams merged;
+        for (const auto & column_name : all_column_names)
+        {
+            auto it = vertical_substreams_by_column.find(column_name);
+            if (it == vertical_substreams_by_column.end())
+                continue;
+            merged.addColumn(column_name);
+            merged.addSubstreamsToLastColumn(it->second);
+        }
+        vertical_columns_substreams = std::move(merged);
+    }
+    vertical_substreams_by_column.clear();
 }
 
 void VerticalInsertTask::finalizeDelayedStream(DelayedColumnStream & delayed, bool need_sync)
@@ -604,10 +630,19 @@ void VerticalInsertTask::finalizeDelayedStream(DelayedColumnStream & delayed, bo
     vertical_checksums.add(std::move(delayed.checksums));
     if (!delayed.substreams.empty())
     {
-        vertical_columns_substreams = ColumnsSubstreams::merge(
-            vertical_columns_substreams,
-            delayed.substreams,
-            all_column_names);
+        for (const auto & [column_name, substreams] : delayed.substreams.getColumnsSubstreams())
+        {
+            auto [it, inserted] = vertical_substreams_by_column.emplace(column_name, substreams);
+            if (!inserted)
+            {
+                auto & existing = it->second;
+                for (const auto & substream : substreams)
+                {
+                    if (std::find(existing.begin(), existing.end(), substream) == existing.end())
+                        existing.emplace_back(substream);
+                }
+            }
+        }
     }
 }
 

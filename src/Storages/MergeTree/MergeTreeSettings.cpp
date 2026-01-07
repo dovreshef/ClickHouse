@@ -1523,6 +1523,10 @@ namespace ErrorCodes
     Number of columns to write per batch during vertical insert.
     Higher values may reduce writer churn but can increase memory usage.
     )", 0) \
+    DECLARE(UInt64, vertical_insert_algorithm_columns_batch_bytes, 0, R"(
+    Target uncompressed bytes per batch during vertical insert.
+    Set to 0 to disable byte-based batching.
+    )", 0) \
     DECLARE(UInt64, max_postpone_time_for_failed_mutations_ms, 5ULL * 60 * 1000, R"(
     The maximum postpone time for failed mutations.
     )", 0) \

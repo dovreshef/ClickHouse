@@ -250,6 +250,7 @@ TESTS=(
   03864_vertical_insert_ipv4_ipv6_key
   03865_vertical_insert_collate_lowcard_key
   03866_vertical_insert_merge_behavior
+  03867_vertical_insert_batch_bytes
 )
 
 TEST_RUNNER=(uv run --with jinja2 -- "$ROOT_DIR/tests/clickhouse-test")
