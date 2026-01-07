@@ -4,6 +4,7 @@
 #include <Core/Settings.h>
 #include <Interpreters/Context.h>
 #include <IO/WriteSettings.h>
+#include <base/defines.h>
 
 namespace DB
 {
@@ -64,11 +65,14 @@ MergedColumnOnlyOutputStream::MergedColumnOnlyOutputStream(
         writer_settings,
         std::move(index_granularity_ptr));
 
+#if defined(DEBUG_OR_SANITIZER_BUILD)
     auto * writer_on_disk = dynamic_cast<MergeTreeDataPartWriterOnDisk *>(writer.get());
-    if (!writer_on_disk)
-        throw Exception(ErrorCodes::NOT_IMPLEMENTED, "MergedColumnOnlyOutputStream supports only parts stored on disk");
-
+    chassert(writer_on_disk);
     writer_on_disk->setWrittenOffsetColumns(offset_columns);
+#else
+    auto * writer_on_disk = static_cast<MergeTreeDataPartWriterOnDisk *>(writer.get());
+    writer_on_disk->setWrittenOffsetColumns(offset_columns);
+#endif
 }
 
 void MergedColumnOnlyOutputStream::write(const Block & block)
@@ -77,6 +81,15 @@ void MergedColumnOnlyOutputStream::write(const Block & block)
         return;
 
     writer->write(block, nullptr);
+    new_serialization_infos.add(block);
+}
+
+void MergedColumnOnlyOutputStream::writeWithPermutation(const Block & block, const IColumn::Permutation * permutation)
+{
+    if (!block.rows())
+        return;
+
+    writer->write(block, permutation);
     new_serialization_infos.add(block);
 }
 

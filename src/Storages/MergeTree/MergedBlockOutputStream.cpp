@@ -1,9 +1,11 @@
 #include <Storages/MergeTree/MergedBlockOutputStream.h>
 #include <Storages/MergeTree/MergeTreeSettings.h>
+#include <Storages/MergeTree/MergeTreeDataPartWriterOnDisk.h>
 #include <IO/HashingWriteBuffer.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/MergeTreeTransaction.h>
 #include <Core/Settings.h>
+#include <base/defines.h>
 
 
 namespace DB
@@ -12,6 +14,7 @@ namespace DB
 namespace ErrorCodes
 {
     extern const int LOGICAL_ERROR;
+    extern const int NOT_IMPLEMENTED;
 }
 
 namespace MergeTreeSetting
@@ -32,7 +35,8 @@ MergedBlockOutputStream::MergedBlockOutputStream(
     size_t part_uncompressed_bytes,
     bool reset_columns_,
     bool blocks_are_granules_size,
-    const WriteSettings & write_settings_)
+    const WriteSettings & write_settings_,
+    WrittenOffsetColumns * offset_columns)
     : IMergedBlockOutputStream(
           std::move(data_settings), data_part->getDataPartStoragePtr(), metadata_snapshot_, columns_list_, reset_columns_)
     , columns_list(columns_list_)
@@ -79,6 +83,18 @@ MergedBlockOutputStream::MergedBlockOutputStream(
         default_codec,
         writer_settings,
         std::move(index_granularity_ptr));
+
+    if (offset_columns)
+    {
+#if defined(DEBUG_OR_SANITIZER_BUILD)
+        auto * writer_on_disk = dynamic_cast<MergeTreeDataPartWriterOnDisk *>(writer.get());
+        chassert(writer_on_disk);
+        writer_on_disk->setWrittenOffsetColumns(offset_columns);
+#else
+        auto * writer_on_disk = static_cast<MergeTreeDataPartWriterOnDisk *>(writer.get());
+        writer_on_disk->setWrittenOffsetColumns(offset_columns);
+#endif
+    }
 }
 
 /// If data is pre-sorted.
