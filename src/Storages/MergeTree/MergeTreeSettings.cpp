@@ -218,6 +218,13 @@ namespace ErrorCodes
     DECLARE(UInt64, vertical_merge_algorithm_min_bytes_to_activate, 0, "Minimal (approximate) uncompressed size in bytes in merging parts to activate Vertical merge algorithm.", 0) \
     DECLARE(UInt64, vertical_merge_algorithm_min_columns_to_activate, 11, "Minimal amount of non-PK columns to activate Vertical merge algorithm.", 0) \
     DECLARE(Bool, vertical_merge_remote_filesystem_prefetch, true, "If true prefetching of data from remote filesystem is used for the next column during merge", 0) \
+    /** Vertical insert settings */ \
+    DECLARE(UInt64, enable_vertical_insert_algorithm, 1, "Enable vertical algorithm for INSERT operations.", 0) \
+    DECLARE(UInt64, vertical_insert_algorithm_min_rows_to_activate, 10000, "Minimum rows in an INSERT block to activate vertical insert algorithm. Smaller blocks use standard horizontal insert.", 0) \
+    DECLARE(UInt64, vertical_insert_algorithm_min_columns_to_activate, 100, "Minimum non-PK columns to activate vertical insert algorithm. Tables with fewer columns use standard horizontal insert.", 0) \
+    DECLARE(UInt64, vertical_insert_algorithm_min_bytes_to_activate, 0, "Minimum uncompressed bytes in an INSERT block to activate vertical insert. Set to 0 to disable byte-based activation.", 0) \
+    DECLARE(UInt64, vertical_insert_algorithm_columns_batch_size, 100, "Number of columns to write per batch during vertical insert. Higher values may reduce writer churn but can increase memory usage.", 0) \
+    DECLARE(UInt64, vertical_insert_algorithm_columns_batch_bytes, 0, "Target uncompressed bytes per batch during vertical insert. Set to 0 to disable byte-based batching.", 0) \
     DECLARE(UInt64, max_postpone_time_for_failed_mutations_ms, 5ULL * 60 * 1000, "The maximum postpone time for failed mutations.", 0) \
     \
     /** Compatibility settings */ \
